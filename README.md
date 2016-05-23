@@ -41,9 +41,38 @@ suppresses value passing in functions that return lists (`sequence`,
 ...     regex(r'\s*:\s*', value=Ignore),            # remove
 ...     regex('\d+', value=int),                    # convert to int
 ... )
+>>> f('"key": 123', {})
 ('', ['key', 123])
 ```
 
+##### Grammars and the Peg class
+
+Pegre is most useful when multiple functions are combined into a
+grammar. The `nonterminal` function generator will call a function
+in the grammar that is passed to the parsing functions.
+
+```python
+>>> from pegre import literal, nonterminal
+>>> grammar = {
+...     "start": nonterminal('Abc'),
+...     "Abc": literal('abc')
+... }
+>>> grammar['start']('abcdefg', grammar)
+('defg', 'abc')
+```
+
+This can be made more convenient with the `Peg` class. Continuing the
+above:
+
+```python
+>>> from pegre import Peg
+>>> p = Peg(grammar=grammar)
+>>> p.parse('abcdefg')
+'abc'
+```
+
+Note that `parse()` used the `start` production by default, and
+returned only the parsed object (without the unparsed remainder).
 
 ## Related Software
 
