@@ -29,8 +29,12 @@ like this:
     COLON       <- ':' Spacing
     Spacing     <- [ \t\n]*
 
-'''
+Note that string processing does not currently process escape
+sequences. Because JSON strings can contain both unicode AND escaped
+unicode, some custom processing is required. See this StackOverflow
+answer: http://stackoverflow.com/a/24519338/1441112
 
+'''
 
 from pegre import (
     Ignore,
@@ -40,6 +44,8 @@ from pegre import (
     sequence,
     choice,
     zero_or_more,
+    bounded,
+    delimited,
     Peg,
 )
 
@@ -50,44 +56,30 @@ def qstrip(s):
     """
     return s[1:-1]
 
+OBJECT   = nonterminal('OBJECT', value=dict)
+ARRAY    = nonterminal('ARRAY', value=list)
+KEYVALS  = nonterminal('KEYVALS')
+VALUES   = nonterminal('VALUES')
+VALUE    = nonterminal('VALUE')
+NUMBER   = nonterminal('NUMBER')
+FLOAT    = regex(r'-?(0|[1-9]\d*)(\.\d+[eE][-+]?|\.|[eE][-+]?)\d+', value=float)
+INT      = regex(r'-?(0|[1-9]\d*)', value=int)
+DQSTRING = regex(r'"[^"\\]*(?:\\.[^"\\]*)*"', value=qstrip)
+TRUE     = literal('true', value=True)
+FALSE    = literal('false', value=False)
+NULL     = literal('null', value=None)
+COMMA    = regex(r'\s*,\s*')
+
 Json = Peg(
     grammar={
-        'start': choice(nonterminal('OBJECT'), nonterminal('ARRAY')),
-        'OBJECT': sequence(
-            regex(r'{\s*'),
-            zero_or_more(
-                nonterminal('KEYVAL'),
-                delimiter=regex(r'\s*,\s*', value=Ignore)
-            ),
-            regex(r'\s*}'),
-            value=lambda x: dict(x[1])
-        ),
-        'KEYVAL': sequence(
-            nonterminal('DQSTRING'),
-            regex(r'\s*:\s*', value=Ignore),
-            nonterminal('VALUE'),
-        ),
-        'ARRAY': sequence(
-            regex(r'\[\s*'),
-            zero_or_more(
-                nonterminal('VALUE'),
-                delimiter=regex(r'\s*,\s*', value=Ignore),
-            ),
-            regex(r'\s*\]'),
-            value=lambda x: x[1]
-        ),
-        'VALUE': choice(*map(
-            nonterminal,
-            ['DQSTRING', 'OBJECT', 'ARRAY', 'NUMBER', 'TRUE', 'FALSE', 'NULL']
-        )),
-        'DQSTRING': regex(r'"[^"\\]*(?:\\.[^"\\]*)*"', value=qstrip),
-        'NUMBER': choice(nonterminal('FLOAT'), nonterminal('INT')),
-        'FLOAT': regex(r'-?(0|[1-9]\d*)(\.\d+[eE][-+]?|\.|[eE][-+]?)\d+',
-                       value=float),
-        'INT': regex(r'-?(0|[1-9]\d*)', value=int),
-        'TRUE': literal('true', value=True),
-        'FALSE': literal('false', value=False),
-        'NULL': literal('null', value=None),
+        'start': choice(OBJECT, ARRAY),
+        'OBJECT': bounded(regex(r'\{\s*'), KEYVALS, regex(r'\s*}')),
+        'KEYVALS': delimited(nonterminal('KEYVAL'), COMMA),
+        'KEYVAL': sequence(DQSTRING, regex(r'\s*:\s*', value=Ignore), VALUE),
+        'ARRAY': bounded(regex(r'\[\s*'), VALUES, regex(r'\s*\]')),
+        'VALUES': delimited(VALUE, COMMA),
+        'VALUE': choice(DQSTRING, OBJECT, ARRAY, NUMBER, TRUE, FALSE, NULL),
+        'NUMBER': choice(FLOAT, INT),
     }
 )
 
@@ -109,3 +101,11 @@ if __name__ == '__main__':
         }
     }'''
     print(Json.parse(s))
+    import timeit
+    print(
+        timeit.timeit(
+            'Json.parse(s)',
+            setup='from __main__ import Json, s',
+            number=10000
+        )
+    )

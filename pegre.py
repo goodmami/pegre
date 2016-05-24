@@ -1,6 +1,7 @@
 
 import re
 from functools import wraps
+from collections import Sequence
 
 __all__ = [
     'Ignore',
@@ -59,7 +60,10 @@ def regex(r):
     """
     Create a PEG function to match a regular expression.
     """
-    p = re.compile(r)
+    if isinstance(r, str):
+        p = re.compile(r)
+    else:
+        p = r
     def match_regex(s, grm):
         m = p.match(s)
         if m is not None:
@@ -188,7 +192,7 @@ def one_or_more(e, delimiter=None):
             while result is not None:
                 s, obj = result
                 if obj is not Ignore:
-                    accumulate(data, obj)
+                    data.append(obj)
                 if delimiter is not None:
                     result = delimiter(s, grm)
                     if result is None:
@@ -200,6 +204,14 @@ def one_or_more(e, delimiter=None):
             return (s, data)
         return None
     return match_one_or_more
+
+@valuemap
+def bounded(pre, expr, post):
+    return sequence(pre, expr, post, value=lambda x: x[1])
+
+@valuemap
+def delimited(expr, delim):
+    return zero_or_more(expr, delimiter=delim, value=lambda x: x[::2])
 
 
 class Peg(object):
